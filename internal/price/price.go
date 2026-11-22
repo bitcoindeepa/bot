@@ -2,7 +2,7 @@ package price
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -83,11 +83,18 @@ func (p *PriceWatcher) Watch() error {
 
 func (p *PriceWatcher) GetCoinbasePrice(currency string) (float64, error) {
 	coinbaseEndpoint, err := url.Parse(fmt.Sprintf("https://api.coinbase.com/v2/prices/spot?currency=%s", currency))
+	if err != nil {
+		return 0, err
+	}
 	response, err := p.client.Get(coinbaseEndpoint.String())
 	if err != nil {
 		return 0, err
 	}
-	bodyBytes, err := ioutil.ReadAll(response.Body)
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("coinbase: unexpected status %d", response.StatusCode)
+	}
+	bodyBytes, err := io.ReadAll(response.Body)
 	if err != nil {
 		log.Debug(err)
 		return 0, err
@@ -109,11 +116,18 @@ func (p *PriceWatcher) GetBitfinexPrice(currency string) (float64, error) {
 	var bitfinexCurrencyToPair = map[string]string{"USD": "btcusd", "EUR": "btceur", "GBP": "btcusd", "JPY": "btcjpy"}
 	pair := bitfinexCurrencyToPair[currency]
 	bitfinexEndpoint, err := url.Parse(fmt.Sprintf("https://api.bitfinex.com/v1/pubticker/%s", pair))
+	if err != nil {
+		return 0, err
+	}
 	response, err := p.client.Get(bitfinexEndpoint.String())
 	if err != nil {
 		return 0, err
 	}
-	bodyBytes, err := ioutil.ReadAll(response.Body)
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("bitfinex: unexpected status %d", response.StatusCode)
+	}
+	bodyBytes, err := io.ReadAll(response.Body)
 	if err != nil {
 		log.Debug(err)
 		return 0, err
