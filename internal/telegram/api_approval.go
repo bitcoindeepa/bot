@@ -201,7 +201,7 @@ func (bot *TipBot) approveAPITransactionHandler(ctx intercept.Context) (intercep
 	// Update approval message to show success
 	if ctx.Callback().Message.Private() {
 		bot.tryDeleteMessage(ctx.Callback().Message)
-		successMsg := fmt.Sprintf("✅ Payment approved and sent successfully!\n\n💸 Amount: %s\n👤 To: @%s", thirdparty.FormatSatsWithLKR(approvalData.Amount), approvalData.ToUsername)
+		successMsg := fmt.Sprintf("✅ Payment approved and sent successfully!\n\n💸 Amount: %s\n👤 To: %s", thirdparty.FormatSatsWithLKR(approvalData.Amount), apiRecipientMention(approvalData.ToUsername))
 		if approvalData.Memo != "" {
 			successMsg += fmt.Sprintf("\n✉️ Memo: %s", str.MarkdownEscape(approvalData.Memo))
 		}
@@ -418,6 +418,11 @@ func CreateAPIInvoiceApprovalRequest(bot *TipBot, fromUser *lnbits.User, invoice
 	return nil
 }
 
+// apiRecipientMention is "@username", escaped for Markdown messages.
+func apiRecipientMention(username string) string {
+	return str.MarkdownEscape("@" + username)
+}
+
 // CreateAPIApprovalRequest creates an approval request for API transaction (similar to send confirmation)
 func CreateAPIApprovalRequest(bot *TipBot, fromUser *lnbits.User, toUsername string, amount int64, memo string, transactionID string, clientIP string, expiresAt time.Time) error {
 	// Check if toUsername is actually a user ID and get the actual username
@@ -433,8 +438,10 @@ func CreateAPIApprovalRequest(bot *TipBot, fromUser *lnbits.User, toUsername str
 		}
 	}
 
-	// Create confirmation text (same format as /send command)
-	toUserStrMention := fmt.Sprintf("@%s", actualUsername)
+	// Create confirmation text (same format as /send command). The message is
+	// Markdown, so the name is escaped: an "_" in a username like naween_95
+	// would otherwise open italics and Telegram would reject the message.
+	toUserStrMention := apiRecipientMention(actualUsername)
 	confirmText := fmt.Sprintf("Do you want to pay to %s?\n\n💸 Amount: %s", toUserStrMention, thirdparty.FormatSatsWithLKR(amount))
 	if memo != "" {
 		confirmText += fmt.Sprintf("\n✉️ %s", str.MarkdownEscape(memo))
