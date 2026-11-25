@@ -39,6 +39,22 @@ func reservationsFor(telegramID int64) *senderReservations {
 	return state
 }
 
+// ReservedBalance returns the sats that telegramID's in-flight payments hold
+// right now (reserved, not yet accepted by lnbits). It is 0 for a user with no
+// payment in flight, and doesn't create any state for a user it hasn't seen.
+// It waits for a balance check of that user that is in progress.
+func ReservedBalance(telegramID int64) int64 {
+	reservationsMu.Lock()
+	state, ok := reservations[telegramID]
+	reservationsMu.Unlock()
+	if !ok {
+		return 0
+	}
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	return state.reserved
+}
+
 // BalanceReservation holds sats for one payment until Release is called.
 type BalanceReservation struct {
 	state  *senderReservations
