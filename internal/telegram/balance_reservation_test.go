@@ -73,6 +73,13 @@ func TestReserveConcurrent(t *testing.T) {
 
 func TestReservedBalance(t *testing.T) {
 	const id int64 = 987654321
+	// reservationsFor below adds a global entry; remove it so -count=N and
+	// later tests start from no state for this user.
+	t.Cleanup(func() {
+		reservationsMu.Lock()
+		delete(reservations, id)
+		reservationsMu.Unlock()
+	})
 	if got := ReservedBalance(id); got != 0 {
 		t.Fatalf("unknown user: %d, want 0", got)
 	}
