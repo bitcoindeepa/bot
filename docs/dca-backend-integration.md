@@ -242,7 +242,26 @@ Default limits: `min_amount` 1, `max_amount` 1,000,000, `admin_approval_threshol
 ```json
 { "telegram_id": 123456789 }
 ```
-→ `{ "success": true, "balance": 5000, "balance_lkr": "…", "username": "…", ... }`
+→
+```json
+{
+  "success": true, "telegram_id": 123456789,
+  "balance": 5000, "balance_lkr": "…",
+  "available_balance": 500, "available_balance_lkr": "…",
+  "pot_balance": 4500, "pot_balance_lkr": "…",
+  "pots": [ { "name": "rent", "balance": 3000 }, { "name": "trip", "balance": 1500 } ],
+  "username": "…", ...
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `balance` | The whole wallet, **pots included** |
+| `available_balance` | What the user can spend or send: `balance` − `pot_balance`, never below 0. Use this for "enough to sell/send?" checks |
+| `pot_balance` | Sats in savings pots. They stay in the same wallet but can't be moved until the user withdraws them from the pot in the bot |
+| `pots` | Each pot (`name`, `balance` in sats), oldest first; `[]` when the user has none |
+
+`available_balance`, `pot_balance` and `pots` are always present on success. If the pots can't be read the call answers `success: false` rather than reporting the whole wallet as spendable.
 
 ### 4.5 `POST /api/v1/usertransactions` — a user's history
 
