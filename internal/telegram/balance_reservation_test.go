@@ -70,3 +70,28 @@ func TestReserveConcurrent(t *testing.T) {
 		t.Fatalf("granted %d reservations of 100 from a balance of 1000, want 10", granted)
 	}
 }
+
+func TestReservedBalance(t *testing.T) {
+	const id int64 = 987654321
+	if got := ReservedBalance(id); got != 0 {
+		t.Fatalf("unknown user: %d, want 0", got)
+	}
+	reservationsMu.Lock()
+	_, created := reservations[id]
+	reservationsMu.Unlock()
+	if created {
+		t.Fatal("ReservedBalance created state for an unknown user")
+	}
+
+	r, _, err := reservationsFor(id).reserve(300, func() (int64, error) { return 1000, nil })
+	if err != nil || r == nil {
+		t.Fatalf("reserve: %v %v", r, err)
+	}
+	if got := ReservedBalance(id); got != 300 {
+		t.Fatalf("in flight: %d, want 300", got)
+	}
+	r.Release()
+	if got := ReservedBalance(id); got != 0 {
+		t.Fatalf("after release: %d, want 0", got)
+	}
+}
