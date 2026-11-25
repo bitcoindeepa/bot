@@ -82,3 +82,35 @@ func TestWriteBalanceFailureKeepsShape(t *testing.T) {
 		}
 	}
 }
+
+// Bad requests keep their 400 and their {"error": ...} message, now in the
+// same shape as every other failure.
+func TestUserBalanceBadRequestShape(t *testing.T) {
+	for _, tc := range []struct{ name, body, msg string }{
+		{"invalid json", `{`, "Invalid JSON request"},
+		{"invalid telegram id", `{"telegram_id":0}`, "Invalid Telegram ID"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			Service{}.UserBalance(rec, httptest.NewRequest("POST", "/api/v1/userbalance", strings.NewReader(tc.body)))
+			if rec.Code != 400 {
+				t.Fatalf("code %d, want 400", rec.Code)
+			}
+			body := rec.Body.String()
+			for _, want := range []string{`"success":false`, `"pots":[]`, `"available_balance":0`, `"pot_balance":0`, `"message":"` + tc.msg + `"`, `"error":"` + tc.msg + `"`} {
+				if !strings.Contains(body, want) {
+					t.Errorf("missing %s in %s", want, body)
+				}
+			}
+		})
+	}
+}
+
+// A 200 failure has no error field (success false says it).
+func TestWriteBalanceFailureHasNoErrorField(t *testing.T) {
+	rec := httptest.NewRecorder()
+	writeBalanceFailure(rec, 42, "Failed to retrieve balance")
+	if strings.Contains(rec.Body.String(), `"error"`) {
+		t.Fatalf("unexpected error field: %s", rec.Body.String())
+	}
+}

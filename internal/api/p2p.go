@@ -495,6 +495,12 @@ func (p *P2PService) meBody(sender *lnbits.User) (map[string]interface{}, error)
 	if err != nil {
 		return nil, err
 	}
+	// balance already leaves pots out; say how much sits in them, from the
+	// same moment, so the app can explain a limit below the wallet total.
+	potBalance, err := p.Bot.GetUserTotalPotBalance(sender)
+	if err != nil {
+		return nil, err
+	}
 	used, _ := p.Bot.P2PDailyUsed(sender.Telegram.ID)
 	cfg := internal.Configuration.API.P2P
 	remaining := cfg.DailyLimit - used
@@ -504,6 +510,7 @@ func (p *P2PService) meBody(sender *lnbits.User) (map[string]interface{}, error)
 	return map[string]interface{}{
 		"telegram_id": sender.Telegram.ID, "username": sender.Telegram.Username, "name": telegram.DisplayName(sender.Telegram),
 		"balance": balance, "balance_lkr": thirdparty.FormatSatsWithLKR(balance),
+		"pot_balance": potBalance,
 		"limits": map[string]int64{
 			"max_amount": cfg.MaxAmount, "daily_limit": cfg.DailyLimit, "daily_used": used,
 			"daily_remaining": remaining,
