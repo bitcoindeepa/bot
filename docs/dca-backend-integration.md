@@ -484,9 +484,11 @@ The **login** call, and the only one that carries the Telegram credential (§5.1
 ### 6.2 `GET /api/v1/p2p/me`
 
 ```json
-{ "telegram_id": 111, "username": "alice", "name": "Alice", "balance": 250000, "balance_lkr": "…",
+{ "telegram_id": 111, "username": "alice", "name": "Alice", "balance": 250000, "balance_lkr": "…", "pot_balance": 40000,
   "limits": { "max_amount": 100000, "daily_limit": 500000, "daily_used": 60000, "daily_remaining": 440000 } }
 ```
+
+`balance` is what the user can send: the wallet minus savings pots. `pot_balance` is the sats in pots (read with `balance`), so the app can say why the limit is below the wallet total.
 
 ### 6.3 Send to another bot user
 
