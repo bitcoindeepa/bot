@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/LightningTipBot/LightningTipBot/internal/lnbits"
 	"github.com/LightningTipBot/LightningTipBot/internal/telegram"
 	log "github.com/sirupsen/logrus"
 )
@@ -14,17 +15,33 @@ type UserBalanceRequest struct {
 	TelegramID int64 `json:"telegram_id"` // Telegram user ID
 }
 
-// UserBalanceResponse represents the JSON response for the user balance API
+// PotBalance is one savings pot in the user balance response.
+type PotBalance struct {
+	Name    string `json:"name"`
+	Balance int64  `json:"balance"` // sats
+}
+
+// UserBalanceResponse represents the JSON response for the user balance API.
+//
+// Savings pots are not separate wallets: their sats stay in the user's LNbits
+// wallet and are only earmarked in the bot's DB. So Balance is the whole
+// wallet (pots included), AvailableBalance is what the user can spend
+// (wallet minus pots, never below 0) and PotBalance is the sum of the pots.
 type UserBalanceResponse struct {
-	Success    bool   `json:"success"`
-	TelegramID int64  `json:"telegram_id"`
-	Balance    int64  `json:"balance"`               // Balance in satoshis
-	BalanceLKR string `json:"balance_lkr,omitempty"` // LKR conversion
-	FirstName  string `json:"first_name,omitempty"`
-	LastName   string `json:"last_name,omitempty"`
-	Username   string `json:"username,omitempty"`
-	CreatedAt  string `json:"created_at,omitempty"`
-	Message    string `json:"message,omitempty"`
+	Success             bool         `json:"success"`
+	TelegramID          int64        `json:"telegram_id"`
+	Balance             int64        `json:"balance"`               // Whole wallet in satoshis, pots included
+	BalanceLKR          string       `json:"balance_lkr,omitempty"` // LKR conversion
+	AvailableBalance    int64        `json:"available_balance"`     // Spendable sats (wallet minus pots)
+	AvailableBalanceLKR string       `json:"available_balance_lkr,omitempty"`
+	PotBalance          int64        `json:"pot_balance"` // Sats locked in savings pots
+	PotBalanceLKR       string       `json:"pot_balance_lkr,omitempty"`
+	Pots                []PotBalance `json:"pots"` // Each pot, oldest first; [] when none
+	FirstName           string       `json:"first_name,omitempty"`
+	LastName            string       `json:"last_name,omitempty"`
+	Username            string       `json:"username,omitempty"`
+	CreatedAt           string       `json:"created_at,omitempty"`
+	Message             string       `json:"message,omitempty"`
 }
 
 // UserBalance handles the /api/v1/userbalance endpoint for getting user balance by Telegram ID
@@ -75,6 +92,24 @@ func (s Service) UserBalance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Pots are earmarked in the bot's DB; without them we can't say what is
+	// spendable, so fail rather than report the whole wallet as available.
+	pots, err := s.Bot.ListUserPots(user)
+	if err != nil {
+		log.Errorf("[api/userbalance] Failed to get pots for user %d: %v", req.TelegramID, err)
+		response := UserBalanceResponse{
+			Success:    false,
+			TelegramID: req.TelegramID,
+			Balance:    0,
+			Message:    "Failed to retrieve balance",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+	available, potTotal, potList := balanceBreakdown(balance, pots)
+
 	// Convert to LKR if possible
 	balanceLKR := getLKRValue(balance)
 
@@ -87,20 +122,41 @@ func (s Service) UserBalance(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := UserBalanceResponse{
-		Success:    true,
-		TelegramID: req.TelegramID,
-		Balance:    balance,
-		BalanceLKR: balanceLKR,
-		FirstName:  firstName,
-		LastName:   lastName,
-		Username:   username,
-		CreatedAt:  user.CreatedAt.Format(time.RFC3339),
-		Message:    "Balance retrieved successfully",
+		Success:             true,
+		TelegramID:          req.TelegramID,
+		Balance:             balance,
+		BalanceLKR:          balanceLKR,
+		AvailableBalance:    available,
+		AvailableBalanceLKR: getLKRValue(available),
+		PotBalance:          potTotal,
+		PotBalanceLKR:       getLKRValue(potTotal),
+		Pots:                potList,
+		FirstName:           firstName,
+		LastName:            lastName,
+		Username:            username,
+		CreatedAt:           user.CreatedAt.Format(time.RFC3339),
+		Message:             "Balance retrieved successfully",
 	}
 
-	log.Infof("[api/userbalance] Balance retrieved for user %d: %d sats", req.TelegramID, balance)
+	log.Infof("[api/userbalance] Balance retrieved for user %d: %d sats (available %d, pots %d)", req.TelegramID, balance, available, potTotal)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
+}
+
+// balanceBreakdown splits a wallet balance into spendable sats and sats held
+// in pots, the same way GetUserAvailableBalance does (available never below 0).
+// The pot list is never nil, so it encodes as [].
+func balanceBreakdown(walletBalance int64, pots []lnbits.SavingsPot) (available, potTotal int64, list []PotBalance) {
+	list = make([]PotBalance, 0, len(pots))
+	for _, p := range pots {
+		potTotal += p.Balance
+		list = append(list, PotBalance{Name: p.Name, Balance: p.Balance})
+	}
+	available = walletBalance - potTotal
+	if available < 0 {
+		available = 0
+	}
+	return available, potTotal, list
 }
