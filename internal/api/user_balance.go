@@ -44,6 +44,9 @@ type UserBalanceResponse struct {
 	Username            string       `json:"username,omitempty"`
 	CreatedAt           string       `json:"created_at,omitempty"`
 	Message             string       `json:"message,omitempty"`
+	// Error repeats Message on a 400 (bad request): those answered {"error": ...}
+	// before, and callers read that field.
+	Error string `json:"error,omitempty"`
 }
 
 // UserBalance handles the /api/v1/userbalance endpoint for getting user balance by Telegram ID
@@ -52,13 +55,13 @@ func (s Service) UserBalance(w http.ResponseWriter, r *http.Request) {
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		log.Errorf("[api/userbalance] Invalid JSON request: %v", err)
-		RespondError(w, "Invalid JSON request")
+		writeBalanceError(w, http.StatusBadRequest, 0, "Invalid JSON request")
 		return
 	}
 
 	// Validate request
 	if req.TelegramID <= 0 {
-		RespondError(w, "Invalid Telegram ID")
+		writeBalanceError(w, http.StatusBadRequest, req.TelegramID, "Invalid Telegram ID")
 		return
 	}
 
@@ -157,8 +160,21 @@ func balanceFailure(telegramID int64, message string) UserBalanceResponse {
 	}
 }
 
+// writeBalanceFailure answers 200 with success false: the request was fine,
+// the balance couldn't be read.
 func writeBalanceFailure(w http.ResponseWriter, telegramID int64, message string) {
+	writeBalanceError(w, http.StatusOK, telegramID, message)
+}
+
+// writeBalanceError writes the failure shape with status. A 400 also sets
+// error, as RespondError did, so a caller reading that field still finds the
+// message.
+func writeBalanceError(w http.ResponseWriter, status int, telegramID int64, message string) {
+	resp := balanceFailure(telegramID, message)
+	if status == http.StatusBadRequest {
+		resp.Error = message
+	}
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(balanceFailure(telegramID, message))
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(resp)
 }
