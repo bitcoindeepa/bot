@@ -205,7 +205,7 @@ func (bot *TipBot) collectApprove(c *CollectRequest, payer *lnbits.User) (t *P2P
 	t = &P2PTransfer{
 		Base: storage.New(storage.ID(c.TransferID())), Kind: P2PKindInternal, Status: P2PProcessing,
 		FromTelegramID: payer.Telegram.ID, ToTelegramID: c.ToTelegramID, ToUsername: c.ToUsername, ToName: c.ToName,
-		Amount: c.Amount, Memo: c.Memo, IdempotencyKey: "collect:" + c.ID, CollectID: c.ID,
+		Amount: c.Amount, AmountLKR: lkrValueNow(c.Amount), Memo: c.Memo, IdempotencyKey: "collect:" + c.ID, CollectID: c.ID,
 	}
 	if err := bot.p2pSave(t); err != nil {
 		bot.p2pEnd(t, P2PFailed, "Could not start the payment. Nothing was sent.", nil)

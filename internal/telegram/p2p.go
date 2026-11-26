@@ -82,16 +82,20 @@ func p2pErr(code, format string, args ...interface{}) *P2PError {
 // P2PTransfer is one Mini App send or invoice payment.
 type P2PTransfer struct {
 	*storage.Base
-	Kind           string    `json:"kind"`
-	Status         string    `json:"status"`
-	FromTelegramID int64     `json:"from_telegram_id"`
-	ToTelegramID   int64     `json:"to_telegram_id,omitempty"`
-	ToUsername     string    `json:"to_username,omitempty"`
-	ToName         string    `json:"to_name,omitempty"`
-	Invoice        string    `json:"invoice,omitempty"`
-	PaymentHash    string    `json:"payment_hash,omitempty"`
-	Description    string    `json:"description,omitempty"`
-	Amount         int64     `json:"amount"`
+	Kind           string `json:"kind"`
+	Status         string `json:"status"`
+	FromTelegramID int64  `json:"from_telegram_id"`
+	ToTelegramID   int64  `json:"to_telegram_id,omitempty"`
+	ToUsername     string `json:"to_username,omitempty"`
+	ToName         string `json:"to_name,omitempty"`
+	Invoice        string `json:"invoice,omitempty"`
+	PaymentHash    string `json:"payment_hash,omitempty"`
+	Description    string `json:"description,omitempty"`
+	Amount         int64  `json:"amount"`
+	// AmountLKR is the rupee value of Amount at the price when the transfer
+	// started (a bare number, "1,234.56"), so it doesn't move with the price
+	// later. Empty on older records and when the price wasn't available.
+	AmountLKR      string    `json:"amount_lkr,omitempty"`
 	Fee            int64     `json:"fee,omitempty"`
 	Preimage       string    `json:"preimage,omitempty"`
 	Memo           string    `json:"memo,omitempty"`
@@ -253,7 +257,7 @@ func (bot *TipBot) P2PStartSend(from *lnbits.User, toTelegramID, amount int64, m
 		Base: storage.New(storage.ID(newP2PID())), Kind: P2PKindInternal, Status: P2PProcessing,
 		FromTelegramID: from.Telegram.ID, ToTelegramID: to.Telegram.ID,
 		ToUsername: to.Telegram.Username, ToName: DisplayName(to.Telegram),
-		Amount: amount, Memo: memo, IdempotencyKey: idemKey,
+		Amount: amount, AmountLKR: lkrValueNow(amount), Memo: memo, IdempotencyKey: idemKey,
 	}
 	t, created, err := bot.claimIdempotency(t)
 	if err != nil || !created {
@@ -307,7 +311,7 @@ func (bot *TipBot) P2PStartInvoice(from *lnbits.User, invoice, memo, idemKey str
 		FromTelegramID: from.Telegram.ID,
 		Invoice:        strings.TrimPrefix(strings.ToLower(strings.TrimSpace(invoice)), "lightning:"),
 		PaymentHash:    dec.PaymentHash, Description: dec.Description,
-		Amount: dec.Amount, Memo: memo, IdempotencyKey: idemKey,
+		Amount: dec.Amount, AmountLKR: lkrValueNow(dec.Amount), Memo: memo, IdempotencyKey: idemKey,
 	}
 	t, created, err := bot.claimIdempotency(t)
 	if err != nil || !created {
@@ -793,4 +797,14 @@ func (bot *TipBot) P2PGet(id string) (*P2PTransfer, error) {
 		return nil, err
 	}
 	return t, nil
+}
+
+// lkrValueNow is the rupee value of amount sats at the current price, as a
+// bare number ("1,234.56"), or "" when the price isn't available.
+func lkrValueNow(amount int64) string {
+	lkrPerSat, _, err := thirdparty.GetSatPrice()
+	if err != nil {
+		return ""
+	}
+	return utils.FormatFloatWithCommas(lkrPerSat * float64(amount))
 }

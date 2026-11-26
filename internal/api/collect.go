@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/LightningTipBot/LightningTipBot/internal/telegram"
-	"github.com/LightningTipBot/LightningTipBot/internal/thirdparty"
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
 )
@@ -31,7 +30,7 @@ type CollectResponse struct {
 
 func (p *P2PService) collectResponse(c *telegram.CollectRequest, withExternalID bool) CollectResponse {
 	resp := CollectResponse{
-		ID: c.ID, Status: c.Status, Amount: c.Amount, AmountLKR: thirdparty.FormatSatsWithLKR(c.Amount), Memo: c.Memo,
+		ID: c.ID, Status: c.Status, Amount: c.Amount, AmountLKR: getLKRValue(c.Amount), Memo: c.Memo,
 		Payer:     RecipientResponse{TelegramID: c.PayerTelegramID, Username: c.PayerUsername},
 		Collector: RecipientResponse{TelegramID: c.ToTelegramID, Username: c.ToUsername, Name: c.ToName},
 		ExpiresAt: c.ExpiresAt, CreatedAt: c.CreatedAt,

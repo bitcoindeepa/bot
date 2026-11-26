@@ -14,7 +14,6 @@ import (
 	"github.com/LightningTipBot/LightningTipBot/internal/netutil"
 	"github.com/LightningTipBot/LightningTipBot/internal/telegram"
 	"github.com/LightningTipBot/LightningTipBot/internal/tgoidc"
-	"github.com/LightningTipBot/LightningTipBot/internal/thirdparty"
 	"github.com/LightningTipBot/LightningTipBot/internal/tma"
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
@@ -349,8 +348,13 @@ type TransferResponse struct {
 
 func toTransferResponse(t *telegram.P2PTransfer) TransferResponse {
 	resp := TransferResponse{
-		ID: t.ID, Kind: t.Kind, Status: t.Status, Amount: t.Amount, AmountLKR: thirdparty.FormatSatsWithLKR(t.Amount),
+		ID: t.ID, Kind: t.Kind, Status: t.Status, Amount: t.Amount, AmountLKR: t.AmountLKR,
 		Fee: t.Fee, Memo: t.Memo, PaymentHash: t.PaymentHash, Description: t.Description, Error: t.Error, CreatedAt: t.CreatedAt,
+	}
+	// A bare number, like every other amount_lkr. Older transfers didn't keep
+	// the value they were sent at: use today's.
+	if resp.AmountLKR == "" {
+		resp.AmountLKR = getLKRValue(t.Amount)
 	}
 	if t.Kind == telegram.P2PKindInternal {
 		resp.To = &RecipientResponse{TelegramID: t.ToTelegramID, Username: t.ToUsername, Name: t.ToName}
@@ -422,7 +426,7 @@ func (p *P2PService) DecodeInvoice(w http.ResponseWriter, r *http.Request) {
 	}
 	cfg := internal.Configuration.API.P2P
 	p2pWriteJSON(w, http.StatusOK, map[string]interface{}{
-		"amount": dec.Amount, "amount_lkr": thirdparty.FormatSatsWithLKR(dec.Amount),
+		"amount": dec.Amount, "amount_lkr": getLKRValue(dec.Amount),
 		"description": dec.Description, "payment_hash": dec.PaymentHash, "expires_at": dec.ExpiresAt,
 		"over_limit": dec.Amount > cfg.MaxAmount,
 	})
@@ -503,7 +507,7 @@ func (p *P2PService) meBody(sender *lnbits.User) (map[string]interface{}, error)
 	}
 	return map[string]interface{}{
 		"telegram_id": sender.Telegram.ID, "username": sender.Telegram.Username, "name": telegram.DisplayName(sender.Telegram),
-		"balance": balance, "balance_lkr": thirdparty.FormatSatsWithLKR(balance),
+		"balance": balance, "balance_lkr": getLKRValue(balance),
 		"limits": map[string]int64{
 			"max_amount": cfg.MaxAmount, "daily_limit": cfg.DailyLimit, "daily_used": used,
 			"daily_remaining": remaining,
